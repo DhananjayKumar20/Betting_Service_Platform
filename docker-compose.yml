@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: 'mysql:8.0'
+    container_name: mysqldb
+    environment:
+      MYSQL_ROOT_PASSWORD: '9897493955'
+      MYSQL_DATABASE: 'betting_service_db'
+    ports:
+      - '3307:3306'
+    networks:
+      - springboot-network
+    volumes:
+        - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+      image: 'confluentinc/cp-zookeeper:7.3.0'
+      container_name: zookeeper
+      environment:
+        ZOOKEEPER_CLIENT_PORT: 2181
+        ZOOKEEPER_TICK_TIME: 2000
+      ports:
+        - '2181:2181'
+      networks:
+        - springboot-network
+      volumes:
+        - zookeeper-data:/var/lib/zookeeper/data
+        - zookeeper-logs:/var/lib/zookeeper/log
+
+  kafka:
+      image: 'confluentinc/cp-kafka:7.3.0'
+      container_name: kafka
+      depends_on:
+        - zookeeper
+      ports:
+        - '9092:9092'
+      networks:
+        - springboot-network
+      environment:
+        KAFKA_BROKER_ID: 1
+        KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+        KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+        KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+        KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      volumes:
+        - kafka-data:/var/lib/kafka/data
+      healthcheck:
+        test: [ "CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list" ]
+        interval: 30s
+        timeout: 10s
+        retries: 5
+
+  springboot:
+    build: .
+    container_name: Betting_Service_Platforms_project
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/betting_service_db
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: 9897493955
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_APPLICATION_NAME: Betting_Service_Platforms
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - '8081:8080'
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - springboot-network
+
+networks:
+  springboot-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-data:
+
